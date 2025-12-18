@@ -83,7 +83,7 @@ Run model inference
 Get percentile prediction (0-1)
    ↓
 If percentile > 0.85 → LONG signal
-If percentile < 0.04 → SHORT signal
+If percentile < 0.15 → SHORT signal
    ↓
 Check confidence threshold
    ↓
@@ -110,8 +110,8 @@ For each open trade:
 ## Trading Logic
 
 ### Entry Conditions
-- Percentile > 96% → LONG
-- Percentile < 4% → SHORT
+- Percentile > 85% → LONG
+- Percentile < 15% → SHORT
 - Confidence > 0.3 (default)
 - Min 6 hours since last trade
 
