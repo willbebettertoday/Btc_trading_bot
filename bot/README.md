@@ -82,7 +82,7 @@ Run model inference
    ↓
 Get percentile prediction (0-1)
    ↓
-If percentile > 0.96 → LONG signal
+If percentile > 0.85 → LONG signal
 If percentile < 0.04 → SHORT signal
    ↓
 Check confidence threshold
