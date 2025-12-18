@@ -237,7 +237,6 @@ All tests passed ✅
 This repository demonstrates the **model architecture** and **training methodology**.
 
 Trading parameters in `config_example.py` are for **educational purposes**.
-They will produce modest results (Sharpe ~10-12).
 
 The parameters that achieved Sharpe 22+ are **proprietary** and require:
 - Extensive backtesting
