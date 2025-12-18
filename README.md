@@ -278,9 +278,9 @@ This project demonstrates:
 
 ## 📫 Contact
 
-- **GitHub**: [@yourusername](https://github.com/yourusername)
-- **Email**: your.email@example.com
-- **LinkedIn**: [Your Name](https://linkedin.com/in/yourprofile)
+- **GitHub**: [@willbebettertoday](https://github.com/willbebettertoday)
+- **Email**: danylpomix4488@gmail.com
+- **LinkedIn**: [Danil Sysenko](https://www.linkedin.com/in/danil-sysenko-207173398/)
 
 ## 📜 License
 
