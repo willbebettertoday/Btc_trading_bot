@@ -1,0 +1,10 @@
+config.py
+*.pth
+*.pkl
+*.json
+*_cache/
+*.csv
+*.log
+*.db
+__pycache__/
+.vscode/
