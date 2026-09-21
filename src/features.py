@@ -54,8 +54,9 @@ def create_features(df_btc, df_eth=None, df_gold=None, df_hashrate=None,
     # label='right', closed='right' dates each bucket at the moment it is
     # complete. Pandas labels a bucket at its start by default, and the
     # forward fill below would then publish the bucket's closing price
-    # across that same bucket's earlier hours: at 01:00 the model could read
-    # the close 22 hours ahead of it.
+    # across that same bucket's earlier hours. For this 4-hour bucket, the
+    # old default could publish a value up to about 3 hours before it was
+    # actually known.
     #
     # The change is taken on the resampled series and only then spread onto
     # the hourly index, so a shift of N means N buckets. Taking it after the
@@ -66,6 +67,10 @@ def create_features(df_btc, df_eth=None, df_gold=None, df_hashrate=None,
     )
 
     # daily data
+    #
+    # Same fix as above, but the skew it masked was much larger here: at
+    # 01:00 the old default could publish the close from 23:00 that same
+    # day, 22 hours ahead of when it was actually known, for every row.
     df_daily = df_btc.resample('1D', label='right', closed='right').agg({'close': 'last'}).ffill()
     daily_close = df_daily['close']
     features['momentum_daily_7d'] = (

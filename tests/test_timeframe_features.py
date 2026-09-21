@@ -90,7 +90,52 @@ class TestCausality:
                 f"max |value| was {during.abs().max():.6g}"
             )
 
+    def test_a_spike_placed_exactly_on_a_bucket_boundary_is_visible_only_from_it(self):
+        """Guards a partial revert: closed='right' kept correct, but label
+        left at its default 'left'.
+
+        That combination still selects the right constituent rows (closed
+        controls membership and is unaffected by the label), but re-attaches
+        the resulting value to the bucket's start instead of its end,
+        republishing it a full bucket-width early. The spike test above
+        places its spike one hour before a boundary; a correctly right-closed
+        aggregator folds that hour into the *next* bucket and its last()
+        lands on the boundary itself, which was never touched, so that test
+        cannot distinguish a correct label from a reverted one. Placing the
+        spike exactly on a boundary can: the fixed code must make it visible
+        starting at that exact hour, and a mislabelled bucket makes it
+        visible a whole bucket-width earlier instead.
+        """
+        n_days = 40
+        n = n_days * 24
+        index = pd.date_range("2024-01-01", periods=n, freq="h", tz="UTC")
+        close = np.full(n, 100.0)
+        boundary_hour = 31 * 24  # a multiple of both 24 (daily) and 4 (4h)
+        close[boundary_hour] = 500.0
+
+        out = create_features(_frame(close, index))
+
+        for col in ("momentum_4h_agg", "momentum_daily_7d", "momentum_daily_30d"):
+            before = out[col].iloc[30 * 24 : boundary_hour]
+            assert (before.abs() < 1e-12).all(), (
+                f"{col} moved before the boundary that closes the bucket "
+                f"holding the spike; max |value| was {before.abs().max():.6g}"
+            )
+            at_boundary = out[col].iloc[boundary_hour]
+            assert abs(at_boundary) > 1e-9, (
+                f"{col} was still 0.0 at the boundary hour where the bucket "
+                "containing the spike closes; it should have become visible "
+                "there"
+            )
+
     def test_aggregates_do_not_change_when_later_rows_arrive(self):
+        """Truncating the input must not change already-computed history.
+
+        This pins a separate property from the causality tests above: a
+        resample+ffill pipeline can be perfectly deterministic under
+        truncation while still leaking data from inside its own bucket, so
+        passing here does not by itself mean the feature is causal.
+        """
         df = _daily_ramp(40)
         full = create_features(df.copy())
         truncated = create_features(df.iloc[: 30 * 24].copy())
