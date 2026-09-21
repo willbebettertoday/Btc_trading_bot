@@ -46,7 +46,7 @@ def create_features(df_btc, df_eth=None, df_gold=None, df_hashrate=None,
     
     # --- MULTI TIMEFRAME ---
     # 4 hour data
-    df_4h = df_btc.resample('4H').agg({'close': 'last'}).ffill()
+    df_4h = df_btc.resample('4h').agg({'close': 'last'}).ffill()
     price_4h = df_4h['close'].reindex(df_btc.index, method='ffill')
     features['momentum_4h_agg'] = price_4h.pct_change(6)
     

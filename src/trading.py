@@ -127,28 +127,31 @@ def check_exit(trade, current_bar, hours_open):
     entry = trade['entry_price']
     direction = trade['direction']
     
-    # check take profit and stop loss
+    # Stop loss is checked before take profit on purpose. When a single bar
+    # touches both levels we cannot know which came first, so we book the
+    # loss. Assuming the win instead is a well known way to inflate a
+    # backtest's Sharpe ratio.
     if direction == 'LONG':
-        # TP hit - price went up enough
-        if current_bar['high'] >= trade['tp_price']:
-            pnl = (trade['tp_price'] - entry) / entry
-            return True, 'TP', pnl
-        
         # SL hit - price dropped too much
         if current_bar['low'] <= trade['sl_price']:
             pnl = (trade['sl_price'] - entry) / entry
             return True, 'SL', pnl
-    
-    else:  # SHORT
-        # TP hit - price went down enough
-        if current_bar['low'] <= trade['tp_price']:
-            pnl = (entry - trade['tp_price']) / entry
+
+        # TP hit - price went up enough
+        if current_bar['high'] >= trade['tp_price']:
+            pnl = (trade['tp_price'] - entry) / entry
             return True, 'TP', pnl
-        
+
+    else:  # SHORT
         # SL hit - price went up too much
         if current_bar['high'] >= trade['sl_price']:
             pnl = (entry - trade['sl_price']) / entry
             return True, 'SL', pnl
+
+        # TP hit - price went down enough
+        if current_bar['low'] <= trade['tp_price']:
+            pnl = (entry - trade['tp_price']) / entry
+            return True, 'TP', pnl
     
     # time exit - been in trade too long
     if hours_open >= MAX_HOLD_HOURS:
