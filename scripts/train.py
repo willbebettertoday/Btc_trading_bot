@@ -40,7 +40,7 @@ from config import (
     WEIGHT_DECAY,
 )
 from src.model import TransformerModel
-from src.features import create_features, returns_to_percentiles
+from src.features import apply_clip_bounds, create_features, fit_clip_bounds, returns_to_percentiles
 
 # use GPU if available
 if torch.cuda.is_available():
@@ -269,8 +269,13 @@ def main():
     
     # create features
     feat_train = create_features(train_btc, train_eth, train_gold, hashrate, train_funding, fear_greed)
-    feat_val = create_features(val_btc, val_eth, val_gold, hashrate, val_funding, fear_greed)
-    
+    clip_bounds = fit_clip_bounds(feat_train)
+    feat_train = apply_clip_bounds(feat_train, clip_bounds)
+
+    feat_val = create_features(
+        val_btc, val_eth, val_gold, hashrate, val_funding, fear_greed, clip_bounds=clip_bounds
+    )
+
     # get common features
     common_features = list(set(feat_train.columns) & set(feat_val.columns))
     common_features.sort()
@@ -326,7 +331,14 @@ def main():
     with open(scaler_path, 'w') as f:
         json.dump(scaler_params, f, indent=2)
     print(f"Saved scaler to {scaler_path}")
-    
+
+    # save clip bounds. They are a fitted statistic like the scaler, so the
+    # live bot must reuse these exact values rather than refit on its own data.
+    clip_path = f"{RESULTS_DIR}/clip_bounds.json"
+    with open(clip_path, 'w') as f:
+        json.dump({col: list(pair) for col, pair in clip_bounds.items()}, f, indent=2)
+    print(f"Saved clip bounds to {clip_path}")
+
     # save config
     config_save = {
         'lookback': LOOKBACK,

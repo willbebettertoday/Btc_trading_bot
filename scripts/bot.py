@@ -28,7 +28,7 @@ from config import (
 from src.model import load_model
 from src.features import create_features
 from src.trading import generate_signal, calculate_position_size, check_exit
-from src.data import fetch_ohlcv, get_current_price, load_cached_data, load_scaler
+from src.data import fetch_ohlcv, get_current_price, load_cached_data, load_clip_bounds, load_scaler
 
 # use CPU for inference (faster startup)
 device = torch.device('cpu')
@@ -115,24 +115,24 @@ def send_telegram(message):
 
 # ==================== PREDICTION ====================
 
-def make_prediction(model, scaler, feature_names):
+def make_prediction(model, scaler, feature_names, clip_bounds):
     """Generate prediction from live data"""
-    
+
     # fetch live data
     btc = fetch_ohlcv('BTC/USDT', '1h', 1000 + LOOKBACK)
     eth = fetch_ohlcv('ETH/USDT', '1h', 1000 + LOOKBACK)
-    
+
     if btc is None:
         print("Could not fetch BTC data")
         return None
-    
+
     if len(btc) < LOOKBACK + 200:
         print("Not enough BTC data")
         return None
-    
+
     # load cached data
     cached = load_cached_data()
-    
+
     # create features
     features = create_features(
         btc,
@@ -140,7 +140,8 @@ def make_prediction(model, scaler, feature_names):
         cached.get('gold'),
         cached.get('hashrate'),
         cached.get('funding'),
-        cached.get('fear_greed')
+        cached.get('fear_greed'),
+        clip_bounds=clip_bounds
     )
     
     # align features with what model expects
@@ -201,6 +202,18 @@ def main():
     scaler, feature_names = load_scaler(f"{RESULTS_DIR}/scaler.json")
     model = load_model(f"{RESULTS_DIR}/best_model.pth", len(feature_names), device)
     print(f"Model loaded with {len(feature_names)} features")
+
+    # load clip bounds. The model was trained on clipped inputs, so
+    # inference must clip with the exact same fitted bounds rather than
+    # run unclipped, which would be a silent accuracy loss.
+    clip_bounds_path = f"{RESULTS_DIR}/clip_bounds.json"
+    if not os.path.exists(clip_bounds_path):
+        raise FileNotFoundError(
+            f"Missing {clip_bounds_path}. The model was trained on clipped features, "
+            "so the bot cannot run without the matching clip bounds. Retrain with "
+            "scripts/train.py to regenerate clip_bounds.json."
+        )
+    clip_bounds = load_clip_bounds(clip_bounds_path)
     
     # send startup message
     send_telegram("🤖 *Bot Started*\n✅ Model loaded and ready")
@@ -226,7 +239,7 @@ def main():
                 if hours_since_trade >= MIN_HOURS_BETWEEN_TRADES:
                     print(f"[{now}] Checking for signals...")
                     
-                    result = make_prediction(model, scaler, feature_names)
+                    result = make_prediction(model, scaler, feature_names, clip_bounds)
                     
                     if result is None:
                         print("Prediction failed, skipping...")

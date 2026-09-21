@@ -8,12 +8,16 @@ import pandas as pd
 from config import FEATURE_PARAMS
 
 
-def create_features(df_btc, df_eth=None, df_gold=None, df_hashrate=None, 
-                    df_funding=None, df_fear_greed=None):
+def create_features(df_btc, df_eth=None, df_gold=None, df_hashrate=None,
+                    df_funding=None, df_fear_greed=None, clip_bounds=None):
     """
     Create features from raw OHLCV data
-    
-    Returns dataframe with all the indicators
+
+    Returns dataframe with all the indicators, unclipped unless
+    `clip_bounds` is supplied. There is no fit-from-this-frame mode:
+    fit outlier bounds on the training split with `fit_clip_bounds`
+    and pass the result in here for every other split, or the bounds
+    become look-ahead leakage.
     """
     p = FEATURE_PARAMS
     features = pd.DataFrame(index=df_btc.index)
@@ -127,13 +131,34 @@ def create_features(df_btc, df_eth=None, df_gold=None, df_hashrate=None,
     # replace infinity with 0
     features = features.replace([np.inf, -np.inf], 0)
     
-    # clip outliers
-    for col in features.columns:
-        lower = features[col].quantile(0.005)
-        upper = features[col].quantile(0.995)
-        features[col] = features[col].clip(lower, upper)
-    
+    if clip_bounds is not None:
+        features = apply_clip_bounds(features, clip_bounds)
+
     return features
+
+
+def fit_clip_bounds(features, lower_q=0.005, upper_q=0.995):
+    """Fit per-column outlier bounds.
+
+    Call this on the training split only, then pass the result to
+    create_features for every other split. Fitting over a whole series and
+    applying the result to its own past is look-ahead leakage: it lets a
+    feature value at time t depend on rows after t. This is the same
+    discipline the RobustScaler in scripts/train.py already follows.
+    """
+    return {
+        str(col): (float(features[col].quantile(lower_q)), float(features[col].quantile(upper_q)))
+        for col in features.columns
+    }
+
+
+def apply_clip_bounds(features, bounds):
+    """Clip each column to its fitted bounds, leaving unlisted columns alone."""
+    out = features.copy()
+    for col, (lower, upper) in bounds.items():
+        if col in out.columns:
+            out[col] = out[col].clip(lower, upper)
+    return out
 
 
 def returns_to_percentiles(returns, window=720):

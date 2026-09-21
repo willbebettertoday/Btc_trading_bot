@@ -78,5 +78,12 @@ def load_scaler(path):
     scaler.n_features_in_ = params['n_features_in_']
     
     feature_names = params['feature_names']
-    
+
     return scaler, feature_names
+
+
+def load_clip_bounds(path):
+    """Load the outlier bounds fitted during training."""
+    with open(path) as f:
+        params = json.load(f)
+    return {col: (float(pair[0]), float(pair[1])) for col, pair in params.items()}
