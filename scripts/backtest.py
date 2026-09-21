@@ -44,6 +44,13 @@ def walk_forward_splits(n_rows, train_size, test_size):
 def performance_summary(returns, periods_per_year=8760):
     """Summarise a series of per-trade returns.
 
+    `periods_per_year` must describe the frequency of the returns being
+    passed in, not the number of observations in this particular sample: use
+    8760 for hourly bar returns, 365 for daily bar returns. For per-trade
+    returns, pass the number of trades per year, not bars per year, since
+    the two differ and conflating them understates or inflates the
+    annualised Sharpe.
+
     A constant series has zero variance, so its Sharpe is infinite rather
     than a division error. An empty series reports zeros, not NaN, so that
     a run with no trades is legible instead of looking broken.
@@ -62,7 +69,7 @@ def performance_summary(returns, periods_per_year=8760):
     if std == 0:
         sharpe = np.inf if mean > 0 else (-np.inf if mean < 0 else 0.0)
     else:
-        sharpe = mean / std * np.sqrt(periods_per_year / max(returns.size, 1))
+        sharpe = mean / std * np.sqrt(periods_per_year)
 
     equity = np.cumprod(1.0 + returns)
     drawdown = equity / np.maximum.accumulate(equity) - 1.0

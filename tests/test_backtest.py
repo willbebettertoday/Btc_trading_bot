@@ -1,5 +1,6 @@
 """Tests for scripts/backtest.py."""
 
+import math
 import sys
 from pathlib import Path
 
@@ -8,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from backtest import performance_summary, walk_forward_splits  # noqa: E402
+from backtest import apply_costs, performance_summary, walk_forward_splits  # noqa: E402
 
 
 class TestWalkForwardSplits:
@@ -54,8 +55,33 @@ class TestPerformanceSummary:
         assert out["max_drawdown"] < 0
         assert out["max_drawdown"] >= -1.0
 
-    def test_sharpe_is_annualised_from_the_period_count(self):
+    def test_sharpe_is_annualised_by_the_period_count_exactly(self):
         returns = np.array([0.01, -0.005, 0.015, 0.0, -0.01, 0.02])
+        mean, std = returns.mean(), returns.std(ddof=1)
+
         hourly = performance_summary(returns, periods_per_year=8760)
+        assert hourly["sharpe"] == pytest.approx(mean / std * math.sqrt(8760))
+
         daily = performance_summary(returns, periods_per_year=365)
-        assert abs(hourly["sharpe"]) > abs(daily["sharpe"])
+        assert daily["sharpe"] == pytest.approx(mean / std * math.sqrt(365))
+
+    def test_sharpe_is_unchanged_when_the_series_is_lengthened_by_repetition(self):
+        # Repeating the same underlying pattern must not systematically move
+        # the annualised Sharpe just because there are more bars. The ddof=1
+        # sample correction on std causes a small, bounded drift as the
+        # sample grows, but nothing close to the ~4x shrink the previous
+        # (incorrect) formula produced by dividing periods_per_year by the
+        # sample size.
+        returns = np.array([0.01, -0.005, 0.015, 0.0, -0.01, 0.02])
+        short = performance_summary(returns)["sharpe"]
+        long = performance_summary(np.tile(returns, 20))["sharpe"]
+        assert long == pytest.approx(short, rel=0.15)
+
+
+class TestApplyCosts:
+    def test_costs_are_subtracted_as_a_round_trip(self):
+        pnl = apply_costs(0.05, cost_bps=10, slippage_bps=5)
+        assert pnl == pytest.approx(0.05 - 2 * (10 + 5) / 10_000)
+
+    def test_zero_costs_leave_the_return_unchanged(self):
+        assert apply_costs(0.05, cost_bps=0, slippage_bps=0) == pytest.approx(0.05)
