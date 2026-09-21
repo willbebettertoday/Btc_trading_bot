@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor the project claims. 3.13 is what the author's own
+        # machine runs, so it is the only version verified before the push.
+        # Testing both is what makes the claimed floor honest.
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install test dependencies
+        # Deliberately not requirements.txt. That pulls torch, which the
+        # tests do not need and which would make CI slow and fragile.
+        # Everything heavy is stubbed in tests/conftest.py.
+        run: pip install pytest ruff numpy pandas scikit-learn
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest -q

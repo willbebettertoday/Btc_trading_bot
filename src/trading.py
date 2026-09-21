@@ -3,10 +3,14 @@ Trading logic - generate signals and manage positions
 """
 
 import numpy as np
-
 from config import (
-    TOP_PERCENTILE, BOTTOM_PERCENTILE, MIN_CONFIDENCE,
-    TP_PARAMS, SL_PARAMS, RISK_PER_TRADE, MAX_HOLD_HOURS
+    BOTTOM_PERCENTILE,
+    MAX_HOLD_HOURS,
+    MIN_CONFIDENCE,
+    RISK_PER_TRADE,
+    SL_PARAMS,
+    TOP_PERCENTILE,
+    TP_PARAMS,
 )
 
 
@@ -34,68 +38,68 @@ def get_confidence(percentile):
 
 def calculate_tp_sl(direction, expected_return, confidence):
     """Calculate take profit and stop loss levels"""
-    
+
     # get multipliers from config
     tp_mult = TP_PARAMS['base'] + confidence * TP_PARAMS['confidence']
     sl_mult = SL_PARAMS['base'] + confidence * SL_PARAMS['confidence']
-    
+
     if direction == 'LONG':
         tp = expected_return * tp_mult
         sl = -abs(expected_return) * sl_mult
     else:
         tp = -expected_return * tp_mult
         sl = abs(expected_return) * sl_mult
-    
+
     # make sure stop loss is not too tight
     if abs(sl) < SL_PARAMS['minimum']:
         if direction == 'LONG':
             sl = -SL_PARAMS['minimum']
         else:
             sl = SL_PARAMS['minimum']
-    
+
     return tp, sl
 
 
 def generate_signal(percentile, historical_returns, window=720):
     """
     Generate trading signal from model prediction
-    
+
     Returns dict with trade info or None if no signal
     """
     # check if percentile is in signal range
     if not is_signal(percentile):
         return None
-    
+
     # determine direction
     if percentile >= TOP_PERCENTILE:
         direction = 'LONG'
     else:
         direction = 'SHORT'
-    
+
     # calculate confidence
     confidence = get_confidence(percentile)
-    
+
     # skip low confidence signals
     if confidence < MIN_CONFIDENCE:
         return None
-    
+
     # get expected return at this percentile
     if len(historical_returns) > window:
         recent = historical_returns[-window:]
     else:
         recent = historical_returns
-    
+
     expected_return = np.percentile(recent, percentile * 100)
-    
+
     # calculate tp/sl
     tp, sl = calculate_tp_sl(direction, expected_return, confidence)
-    
+
     # risk reward ratio
     if sl != 0:
         rr = abs(tp / sl)
     else:
         rr = 0
-    
+
     return {
         'direction': direction,
         'percentile': percentile,
@@ -110,10 +114,10 @@ def generate_signal(percentile, historical_returns, window=720):
 def calculate_position_size(stop_loss):
     """Calculate how big position to take based on risk"""
     sl_distance = abs(stop_loss)
-    
+
     if sl_distance == 0:
         return 0
-    
+
     size = RISK_PER_TRADE / sl_distance
     return size
 
@@ -121,12 +125,12 @@ def calculate_position_size(stop_loss):
 def check_exit(trade, current_bar, hours_open):
     """
     Check if we should close the trade
-    
+
     Returns (should_exit, reason, pnl)
     """
     entry = trade['entry_price']
     direction = trade['direction']
-    
+
     # Stop loss is checked before take profit on purpose. When a single bar
     # touches both levels we cannot know which came first, so we book the
     # loss. Assuming the win instead is a well known way to inflate a
@@ -152,16 +156,16 @@ def check_exit(trade, current_bar, hours_open):
         if current_bar['low'] <= trade['tp_price']:
             pnl = (entry - trade['tp_price']) / entry
             return True, 'TP', pnl
-    
+
     # time exit - been in trade too long
     if hours_open >= MAX_HOLD_HOURS:
         current_price = current_bar['close']
-        
+
         if direction == 'LONG':
             pnl = (current_price - entry) / entry
         else:
             pnl = (entry - current_price) / entry
-        
+
         return True, 'TIME', pnl
-    
+
     return False, '', 0.0

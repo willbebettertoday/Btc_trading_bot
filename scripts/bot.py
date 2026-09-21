@@ -4,12 +4,11 @@ Runs 24/7 and sends signals to Telegram
 """
 
 import os
+import sqlite3
 import sys
 import time
-import sqlite3
 from datetime import datetime, timedelta
 
-import numpy as np
 import pandas as pd
 import requests
 import torch
@@ -25,10 +24,11 @@ from config import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
 )
-from src.model import load_model
-from src.features import create_features
-from src.trading import generate_signal, calculate_position_size, check_exit
+
 from src.data import fetch_ohlcv, get_current_price, load_cached_data, load_clip_bounds, load_scaler
+from src.features import create_features
+from src.model import load_model
+from src.trading import check_exit, generate_signal
 
 # use CPU for inference (faster startup)
 device = torch.device('cpu')
@@ -39,7 +39,7 @@ device = torch.device('cpu')
 def init_database():
     """Create trades table if not exists"""
     conn = sqlite3.connect(DATABASE_FILE)
-    
+
     conn.execute('''
         CREATE TABLE IF NOT EXISTS trades (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +51,7 @@ def init_database():
             status TEXT DEFAULT 'open'
         )
     ''')
-    
+
     conn.commit()
     conn.close()
 
@@ -59,12 +59,13 @@ def init_database():
 def add_trade(open_time, direction, entry_price, tp_price, sl_price):
     """Add new trade to database"""
     conn = sqlite3.connect(DATABASE_FILE)
-    
+
     conn.execute(
-        "INSERT INTO trades (open_time, direction, entry_price, tp_price, sl_price) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO trades (open_time, direction, entry_price, tp_price, sl_price) "
+        "VALUES (?, ?, ?, ?, ?)",
         (open_time.isoformat(), direction, entry_price, tp_price, sl_price)
     )
-    
+
     conn.commit()
     conn.close()
 
@@ -73,10 +74,10 @@ def get_open_trades():
     """Get all open trades"""
     conn = sqlite3.connect(DATABASE_FILE)
     conn.row_factory = sqlite3.Row
-    
+
     cursor = conn.execute("SELECT * FROM trades WHERE status = 'open'")
     trades = cursor.fetchall()
-    
+
     conn.close()
     return trades
 
@@ -84,12 +85,12 @@ def get_open_trades():
 def close_trade(trade_id, reason):
     """Close a trade"""
     conn = sqlite3.connect(DATABASE_FILE)
-    
+
     conn.execute(
         "UPDATE trades SET status = ? WHERE id = ?",
         (f"closed_{reason}", trade_id)
     )
-    
+
     conn.commit()
     conn.close()
 
@@ -99,17 +100,17 @@ def close_trade(trade_id, reason):
 def send_telegram(message):
     """Send message to Telegram"""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    
+
     data = {
         'chat_id': TELEGRAM_CHAT_ID,
         'text': message,
         'parse_mode': 'Markdown'
     }
-    
+
     try:
         response = requests.post(url, json=data, timeout=10)
         return response.status_code == 200
-    except:
+    except Exception:
         return False
 
 
@@ -143,41 +144,41 @@ def make_prediction(model, scaler, feature_names, clip_bounds):
         cached.get('fear_greed'),
         clip_bounds=clip_bounds
     )
-    
+
     # align features with what model expects
     aligned = pd.DataFrame(index=features.index)
-    
+
     for col in feature_names:
         if col in features.columns:
             aligned[col] = features[col]
         else:
             aligned[col] = 0
-    
+
     aligned = aligned.ffill().fillna(0)
-    
+
     # normalize
     X = scaler.transform(aligned)
-    
+
     # take last LOOKBACK rows
     X = X[-LOOKBACK:]
-    
+
     # reshape for model: (1, lookback, features)
     X = X.reshape(1, LOOKBACK, len(feature_names))
     X = torch.FloatTensor(X)
     X = X.to(device)
-    
+
     # predict
     model.eval()
     with torch.no_grad():
         prediction = model(X)
         percentile = prediction.cpu().numpy()[0][0]
-    
+
     # get historical returns for signal calculation
     hist_returns = btc['close'].pct_change().dropna().values
-    
+
     # generate signal
     signal = generate_signal(percentile, hist_returns)
-    
+
     return {
         'timestamp': btc.index[-1],
         'price': btc['close'].iloc[-1],
@@ -192,11 +193,11 @@ def main():
     print("=" * 60)
     print("BTC TRADING BOT")
     print("=" * 60)
-    
+
     # init database
     init_database()
     print("Database ready")
-    
+
     # load model
     print("Loading model...")
     scaler, feature_names = load_scaler(f"{RESULTS_DIR}/scaler.json")
@@ -214,41 +215,41 @@ def main():
             "scripts/train.py to regenerate clip_bounds.json."
         )
     clip_bounds = load_clip_bounds(clip_bounds_path)
-    
+
     # send startup message
     send_telegram("🤖 *Bot Started*\n✅ Model loaded and ready")
-    
+
     # track last trade time
     last_trade_time = datetime.utcnow() - timedelta(hours=MIN_HOURS_BETWEEN_TRADES)
-    
+
     print("\nStarting main loop...")
     print("Press Ctrl+C to stop\n")
-    
+
     # main loop
     while True:
         try:
             now = datetime.utcnow()
-            
+
             # === CHECK FOR NEW SIGNALS ===
             # only check at minute 1 of each hour
             if now.minute == 1:
-                
+
                 # check if enough time since last trade
                 hours_since_trade = (now - last_trade_time).total_seconds() / 3600
-                
+
                 if hours_since_trade >= MIN_HOURS_BETWEEN_TRADES:
                     print(f"[{now}] Checking for signals...")
-                    
+
                     result = make_prediction(model, scaler, feature_names, clip_bounds)
-                    
+
                     if result is None:
                         print("Prediction failed, skipping...")
                     elif result['signal'] is not None:
                         sig = result['signal']
                         price = result['price']
-                        
+
                         print(f"Signal: {sig['direction']} at ${price:.2f}")
-                        
+
                         # calculate prices
                         if sig['direction'] == 'LONG':
                             tp_price = price * (1 + sig['take_profit'])
@@ -256,20 +257,20 @@ def main():
                         else:
                             tp_price = price * (1 - sig['take_profit'])
                             sl_price = price * (1 + sig['stop_loss'])
-                        
+
                         # send telegram
                         if sig['direction'] == 'LONG':
                             emoji = "🟢 LONG"
                         else:
                             emoji = "🔴 SHORT"
-                        
+
                         message = f"""{emoji} *NEW SIGNAL*
 
 Entry: `${price:,.2f}`
 TP: `${tp_price:,.2f}`
 SL: `${sl_price:,.2f}`
 Confidence: `{sig['confidence']:.2f}`"""
-                        
+
                         if send_telegram(message):
                             # save to database
                             add_trade(now, sig['direction'], price, tp_price, sl_price)
@@ -277,28 +278,28 @@ Confidence: `{sig['confidence']:.2f}`"""
                             print("Trade logged!")
                     else:
                         print(f"No signal (percentile: {result['percentile']:.4f})")
-            
+
             # === MONITOR OPEN TRADES ===
             # check every 5 minutes
             if now.minute % 5 == 0:
                 trades = get_open_trades()
-                
+
                 if len(trades) > 0:
                     current_price = get_current_price()
-                    
+
                     if current_price is not None:
                         for trade in trades:
                             # calculate how long trade has been open
                             open_time = datetime.fromisoformat(trade['open_time'])
                             hours_open = (now - open_time).total_seconds() / 3600
-                            
+
                             # create current bar (simplified)
                             current_bar = {
                                 'high': current_price * 1.001,
                                 'low': current_price * 0.999,
                                 'close': current_price
                             }
-                            
+
                             # convert to dict
                             trade_dict = {
                                 'entry_price': trade['entry_price'],
@@ -306,35 +307,37 @@ Confidence: `{sig['confidence']:.2f}`"""
                                 'sl_price': trade['sl_price'],
                                 'direction': trade['direction']
                             }
-                            
+
                             # check exit
-                            should_exit, reason, pnl = check_exit(trade_dict, current_bar, hours_open)
-                            
+                            should_exit, reason, pnl = check_exit(
+                                trade_dict, current_bar, hours_open
+                            )
+
                             if should_exit:
                                 # send notification
                                 if pnl > 0:
                                     emoji = "✅"
                                 else:
                                     emoji = "🛑"
-                                
+
                                 message = f"""{emoji} *TRADE CLOSED*
 
 Reason: {reason}
 PnL: `{pnl*100:+.2f}%`"""
-                                
+
                                 send_telegram(message)
                                 close_trade(trade['id'], reason)
                                 print(f"Trade {trade['id']} closed: {reason}")
-            
+
             # wait until next minute
             seconds_to_wait = 60 - datetime.utcnow().second
             time.sleep(seconds_to_wait)
-            
+
         except KeyboardInterrupt:
             print("\nStopping bot...")
             send_telegram("🛑 *Bot stopped*")
             break
-            
+
         except Exception as e:
             print(f"Error: {e}")
             time.sleep(60)
