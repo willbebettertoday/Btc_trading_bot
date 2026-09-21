@@ -98,7 +98,7 @@ def apply_costs(pnl, cost_bps, slippage_bps):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", default=str(Path(CACHE_DIR) / "hourly.csv"))
+    parser.add_argument("--data", default=str(Path(CACHE_DIR) / "btc_1h.csv"))
     parser.add_argument("--train-size", type=int, default=8760)
     parser.add_argument("--test-size", type=int, default=720)
     parser.add_argument("--cost-bps", type=float, default=10.0)

@@ -4,7 +4,6 @@ Data loading functions
 
 import json
 
-import ccxt
 import numpy as np
 import pandas as pd
 from config import CACHE_DAILY, CACHE_DIR
@@ -13,6 +12,11 @@ from sklearn.preprocessing import RobustScaler
 
 def fetch_ohlcv(symbol, timeframe, limit):
     """Download OHLCV data from Binance"""
+    # Imported lazily: this module also holds pure loaders (load_scaler,
+    # load_clip_bounds, load_cached_data) that must be importable without a
+    # network client installed. CI tests them without installing ccxt.
+    import ccxt
+
     try:
         exchange = ccxt.binance({'enableRateLimit': True})
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
@@ -31,6 +35,8 @@ def fetch_ohlcv(symbol, timeframe, limit):
 
 def get_current_price(symbol='BTC/USDT'):
     """Get current price"""
+    import ccxt
+
     try:
         exchange = ccxt.binance()
         ticker = exchange.fetch_ticker(symbol)
