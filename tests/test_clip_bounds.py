@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.data import load_clip_bounds
 from src.features import apply_clip_bounds, create_features, fit_clip_bounds
 
 
@@ -38,12 +39,48 @@ class TestFitClipBounds:
         for col in bounds:
             assert restored[col][0] == pytest.approx(bounds[col][0])
 
-    def test_fitting_on_a_prefix_ignores_later_rows(self, frame):
-        """This is the whole point: bounds fitted on train must not move
-        when unseen rows arrive."""
+    def test_fit_depends_on_the_rows_it_is_given(self, frame):
+        """This is why fit_clip_bounds is called on the training split
+        alone and its result passed, unchanged, to every other split: if
+        bounds fitted on train and on train-plus-outliers were identical,
+        the whole train-only discipline would be pointless."""
         train = frame.iloc[:300]
-        extended = pd.concat([train, frame.iloc[300:]]).iloc[:300]
-        assert fit_clip_bounds(train) == fit_clip_bounds(extended)
+        outliers = pd.DataFrame(
+            {"a": [1e6, -1e6] * 25, "b": [1e6, -1e6] * 25},
+            index=pd.date_range("2030-01-01", periods=50, freq="h", tz="UTC"),
+        )
+        extended = pd.concat([train, outliers])
+
+        train_bounds = fit_clip_bounds(train)
+        extended_bounds = fit_clip_bounds(extended)
+
+        assert train_bounds != extended_bounds
+        for col in train_bounds:
+            assert extended_bounds[col][1] > train_bounds[col][1], (
+                f"{col}'s upper bound did not move after outliers were appended"
+            )
+            assert extended_bounds[col][0] < train_bounds[col][0], (
+                f"{col}'s lower bound did not move after outliers were appended"
+            )
+
+
+class TestLoadClipBounds:
+    def test_round_trips_through_the_real_save_and_load_path(self, frame, tmp_path):
+        """train.py writes clip_bounds.json as {col: list(pair)}; make sure
+        load_clip_bounds (not a reimplementation of it) reads that back
+        correctly, including that pairs come back as float tuples rather
+        than the lists JSON stores."""
+        bounds = fit_clip_bounds(frame)
+        path = tmp_path / "clip_bounds.json"
+        with open(path, "w") as f:
+            json.dump({col: list(pair) for col, pair in bounds.items()}, f, indent=2)
+
+        loaded = load_clip_bounds(path)
+
+        assert loaded == bounds
+        for pair in loaded.values():
+            assert isinstance(pair, tuple)
+            assert all(isinstance(v, float) for v in pair)
 
 
 class TestApplyClipBounds:
