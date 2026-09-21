@@ -50,15 +50,30 @@ def create_features(df_btc, df_eth=None, df_gold=None, df_hashrate=None,
     
     # --- MULTI TIMEFRAME ---
     # 4 hour data
-    df_4h = df_btc.resample('4h').agg({'close': 'last'}).ffill()
-    price_4h = df_4h['close'].reindex(df_btc.index, method='ffill')
-    features['momentum_4h_agg'] = price_4h.pct_change(6)
-    
+    #
+    # label='right', closed='right' dates each bucket at the moment it is
+    # complete. Pandas labels a bucket at its start by default, and the
+    # forward fill below would then publish the bucket's closing price
+    # across that same bucket's earlier hours: at 01:00 the model could read
+    # the close 22 hours ahead of it.
+    #
+    # The change is taken on the resampled series and only then spread onto
+    # the hourly index, so a shift of N means N buckets. Taking it after the
+    # reindex shifts N rows, which on an hourly index means N hours.
+    df_4h = df_btc.resample('4h', label='right', closed='right').agg({'close': 'last'}).ffill()
+    features['momentum_4h_agg'] = (
+        df_4h['close'].pct_change(6).reindex(df_btc.index, method='ffill')
+    )
+
     # daily data
-    df_daily = df_btc.resample('1D').agg({'close': 'last'}).ffill()
-    price_daily = df_daily['close'].reindex(df_btc.index, method='ffill')
-    features['momentum_daily_7d'] = price_daily.pct_change(7)
-    features['momentum_daily_30d'] = price_daily.pct_change(30)
+    df_daily = df_btc.resample('1D', label='right', closed='right').agg({'close': 'last'}).ffill()
+    daily_close = df_daily['close']
+    features['momentum_daily_7d'] = (
+        daily_close.pct_change(7).reindex(df_btc.index, method='ffill')
+    )
+    features['momentum_daily_30d'] = (
+        daily_close.pct_change(30).reindex(df_btc.index, method='ffill')
+    )
     
     # --- RSI ---
     delta = price.diff()
