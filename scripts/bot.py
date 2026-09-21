@@ -17,7 +17,14 @@ import torch
 # add src folder to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from config import *
+from config import (
+    DATABASE_FILE,
+    LOOKBACK,
+    MIN_HOURS_BETWEEN_TRADES,
+    RESULTS_DIR,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+)
 from src.model import load_model
 from src.features import create_features
 from src.trading import generate_signal, calculate_position_size, check_exit

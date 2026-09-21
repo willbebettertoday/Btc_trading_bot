@@ -20,7 +20,25 @@ warnings.filterwarnings('ignore')
 # add src folder to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from config import *
+from config import (
+    BATCH_SIZE,
+    CACHE_DAILY,
+    CACHE_DIR,
+    D_FF,
+    D_MODEL,
+    DROPOUT,
+    EARLY_STOP_PATIENCE,
+    EPOCHS,
+    LEARNING_RATE,
+    LOOKBACK,
+    N_HEADS,
+    N_LAYERS,
+    RESULTS_DIR,
+    START_DATE,
+    TRAIN_END,
+    VAL_END,
+    WEIGHT_DECAY,
+)
 from src.model import TransformerModel
 from src.features import create_features, returns_to_percentiles
 
