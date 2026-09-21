@@ -32,35 +32,37 @@ BATCH_SIZE = 128
 EPOCHS = 80
 EARLY_STOP_PATIENCE = 20
 
-# === SIGNALS (tune these yourself!) ===
-TOP_PERCENTILE = ...        # when to go LONG
-BOTTOM_PERCENTILE = ...     # when to go SHORT
-MIN_CONFIDENCE = ...        # minimum confidence
+# === SIGNALS ===
+# These are runnable defaults, not the tuned values behind the figures in
+# the README. Tune them on your own validation split before trusting them.
+TOP_PERCENTILE = 0.75       # go LONG at or above this predicted percentile
+BOTTOM_PERCENTILE = 0.25    # go SHORT at or below it
+MIN_CONFIDENCE = 0.15       # skip signals weaker than this
 
-# === RISK (tune these yourself!) ===
-RISK_PER_TRADE = ...
+# === RISK ===
+RISK_PER_TRADE = 0.01       # fraction of equity risked per trade
 
 TP_PARAMS = {
-    'base': ...,
-    'confidence': ...,
+    'base': 1.5,            # take profit as a multiple of expected return
+    'confidence': 1.0,      # extra multiple scaled by signal confidence
 }
 
 SL_PARAMS = {
-    'base': ...,
-    'confidence': ...,
-    'minimum': ...,
+    'base': 1.0,            # stop loss as a multiple of expected return
+    'confidence': 0.0,
+    'minimum': 0.005,       # never place a stop tighter than 0.5%
 }
 
-MIN_HOURS_BETWEEN_TRADES = ...
-MAX_HOLD_HOURS = ...
+MIN_HOURS_BETWEEN_TRADES = 8
+MAX_HOLD_HOURS = 72
 
-# === FEATURES (tune these yourself!) ===
+# === FEATURES ===
 FEATURE_PARAMS = {
-    'momentum_windows': [...],
-    'volatility_windows': [...],
-    'rsi_period': ...,
-    'macd_fast': ...,
-    'macd_slow': ...,
-    'correlation_window': ...,
-    'external_shift': ...,
+    'momentum_windows': [6, 12, 24, 72],
+    'volatility_windows': [24, 72],
+    'rsi_period': 14,
+    'macd_fast': 12,
+    'macd_slow': 26,
+    'correlation_window': 168,
+    'external_shift': 24,   # lag applied to external series to avoid look-ahead
 }
